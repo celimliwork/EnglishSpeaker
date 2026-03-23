@@ -1,0 +1,180 @@
+Bana Amerikan İngilizcesi konuşarak öğrenmek için bir web uygulaması yaz. Uygulama saf HTML, CSS ve JavaScript ile yazılsın, hiçbir backend gerekmemeli, tamamen tarayıcıda çalışsın.
+
+---
+
+### AMAÇ
+
+Kullanıcı Türkçe konuşan biri, Amerikan İngilizcesi öğreniyor. Öğretmeni yok, bu uygulama hem öğretmeni hem pratik ortamı. Uygulamanın ana akışı şu:
+1. Kullanıcı mikrofona konuşur (veya yazar)
+2. Ses metne çevrilir (Web Speech API, dil: en-US)
+3. Metin AI'ya gider, AI İngilizce öğretmeni gibi yanıt verir
+4. AI yanıtı ekranda yazı olarak görünür
+5. AI yanıtı sesli olarak okunur (Web Speech Synthesis, Amerikan aksanı: en-US)
+6. Kullanıcı hem konuştuğunu hem AI'nın yanıtını yazılı görebilir
+
+---
+
+### DOSYA YAPISI (Modüler)
+index.html
+css/styles.css
+js/app.js         → Ana başlatıcı, olay yönetimi
+js/api.js         → AI API çağrıları (Gemini + OpenAI)
+js/speech.js      → STT (konuşma tanıma) ve TTS (sesli okuma)
+js/storage.js     → localStorage yönetimi
+js/ui.js          → DOM render, mesaj balonu, animasyonlar
+
+---
+
+### AI ENTEGRASYONU & MODEL SEÇİMİ
+
+**Desteklenen AI'lar:**
+
+**Google Gemini (birincil, ücretsiz):**
+- Varsayılan ve önerilen AI bu olsun
+- API endpoint: `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={API_KEY}`
+- Modeller (ucuzdan pahalıya sıralı dropdown):
+  - `gemma-3-27b-it`  → En ucuz, varsayılan
+  - `gemini-2.0-flash-lite`
+  - `gemini-2.0-flash`
+  - `gemini-1.5-flash`
+  - `gemini-1.5-pro`
+
+
+**OpenAI ChatGPT (isteğe bağlı):**
+- API endpoint: `https://api.openai.com/v1/chat/completions`
+- Modeller dropdown'u:
+  - `gpt-4o-mini` → En ucuz, varsayılan
+  - `gpt-3.5-turbo`
+  - `gpt-4o`
+- Authorization header: `Bearer {API_KEY}`
+
+**AI Seçimi:**
+- Sağ üstte açık/belirgin bir toggle: "Gemini 🟢" / "ChatGPT ⚪"
+- Seçilen AI ve model localStorage'a kaydedilsin
+- API key girilmemişse konuşma başlamadan uyarı çıksın: "Lütfen önce API key gir"
+- Her iki AI için ayrı key alanı, sadece seçili olan aktif olsun
+- Girilen keyler localstorage da tutulsun
+
+---
+
+### SİSTEM PROMPTU (AI Öğretmen Kişiliği)
+
+Aşağıdaki system prompt her konuşmada kullanılsın, kullanıcı görebilsin ve düzenleyebilsin:
+You are an American English conversation tutor for a Turkish speaker. Your role:
+
+ALWAYS respond in English only
+Keep responses SHORT (2-4 sentences max) — this is spoken conversation
+If the user makes grammar mistakes, gently correct them ONCE at the end of your response in a bracket like: [Correction: "I goes" → "I go"]
+If the user says something in Turkish, kindly ask them to try in English and give a hint
+Focus on natural, everyday American English — slang, contractions, real expressions
+Ask follow-up questions to keep conversation going
+Adapt to the user's level: if they struggle, simplify; if they're confident, challenge them
+Occasionally teach a useful American expression or idiom naturally in conversation
+
+
+Kullanıcı bu system promptu ayarlar panelinde görebilsin ve değiştirebilsin.
+
+---
+
+### KONUŞMA EKRANI
+
+**Layout:**
+- Sol sidebar: sohbet geçmişi listesi (collapsible)
+- Ana alan: mesaj balonları
+- Alt bar: mikrofon + yazı girişi + gönder
+
+**Mesaj Balonları:**
+- Kullanıcı mesajları sağda, mavi/koyu renk
+- AI mesajları solda, farklı renk
+- Her balonun altında: saat + hangi AI/model kullanıldı (ör: "Gemini Flash · 14:32")
+- AI mesajlarında düzeltmeler varsa `[Correction: ...]` kısımları sarı/turuncu renkte vurgulanarak gösterilsin
+- Markdown render edilsin (kalın, italik, kod)
+- Her balonda: 🔊 sesli oku butonu, 📋 kopyala butonu
+
+---
+
+### SES ÖZELLİKLERİ
+
+**STT (Speech to Text) — js/speech.js:**
+- Web Speech API, dil: `en-US`
+- Büyük mikrofon butonu, basılı tut konuş ve bitir diyene kadar aktif, AI dan yanıt alıp konuşması bitince tekrar aktif
+- Konuşma sırasında animasyonlu ses dalgası gösterilsin (CSS ile)
+- Metin gerçek zamanlı textarea'ya yansısın (interim results)
+
+
+**TTS (Text to Speech) — js/speech.js:**
+- Web Speech Synthesis API
+- AI yanıtı gelince otomatik oku 
+- Ses: `en-US` American accent sesi seçilsin (tercihen `en-US` kadın ya da erkek — kullanılabilir seslerden en iyisi otomatik seçilsin)
+- Hız ayarı: 0.7x – 1.3x arası slider (varsayılan: 0.9x — öğrenci için biraz yavaş)
+- Okuma sırasında durdur/devam et butonu
+- Metin üzerinde okunan kelime vurgulansın (SpeechSynthesisUtterance `boundary` event ile)
+
+---
+
+
+
+### SOHBET YÖNETİMİ (localStorage)
+
+- Her sohbet kaydedilsin, benzersiz ID ile (timestamp)
+- Sol sidebar'da sohbet listesi: tarih 
+- Sohbete özel isim verilebilsin
+- Sohbet silinebilsin
+- Maksimum 50 sohbet saklanabilsin, eskiler otomatik silinsin
+- API'ye gönderilecek geçmiş son 20 mesajla sınırlı tutulsun (token tasarrufu için)
+- Sohbet JSON olarak dışa aktarılabilsin
+
+
+
+---
+
+### AYARLAR PANELİ (Sağ üst ⚙️)
+
+- Gemini API Key (input type=password, göster/gizle toggle)
+- OpenAI API Key (input type=password)
+- Aktif AI seçimi: Gemini / ChatGPT radio buton
+- Gemini model dropdown
+- OpenAI model dropdown
+- System prompt textarea (düzenlenebilir)
+- TTS hız slider
+- TTS otomatik okuma toggle
+- STT dil seçimi (en-US / tr-TR)
+- Konuşma geçmişi token limiti (10 / 20 / 30 mesaj)
+- Tüm veriler temizle butonu
+- Tümü localStorage'a kaydedilsin
+
+---
+
+### TASARIM
+
+- Koyu tema (dark mode) varsayılan, açık temaya geçiş toggle'ı
+- Renk paleti: koyu lacivert/siyah arka plan, amber/turuncu vurgu renkleri (konuşma/öğrenme enerjisini yansıtsın)
+- Font: Google Fonts'tan "DM Sans" (body) + "Familjen Grotesk" (başlıklar) — CDN ile
+- Mikrofon butonu büyük, merkezi, animasyonlu (aktifken kırmızı halkalar yayılsın)
+- Responsive: mobilde de tam çalışsın (iphone 12 baz alınabilir)
+- Sol sidebar mobilde alt drawer'a dönüşsün
+- Toast notification sistemi (hata, başarı, uyarı)
+- Klavye kısayolları: Space = mikrofonu aç/kapat, Enter = gönder, Esc = modalı kapat
+
+---
+
+### HATA YÖNETİMİ
+
+- API key yok → "API key girilmedi" toast
+- API hatası (401) → "Geçersiz API key, Ayarlar'dan kontrol et"
+- API hatası (429) → "Rate limit aşıldı, biraz bekle veya modeli değiştir"
+- Network hatası → "Bağlantı hatası, internet bağlantını kontrol et"
+- STT desteklenmiyor → "Tarayıcın mikrofonu desteklemiyor, Chrome kullan"
+- Tüm hatalar Türkçe gösterilsin (kullanıcı Türk)
+
+---
+
+### ÖNEMLİ NOTLAR
+
+- Hiçbir API key console.log ile yazdırılmasın
+- API çağrılarında try/catch zorunlu
+- Tüm fetch çağrıları async/await ile yazılsın
+- Kod dosyaları arası iletişim custom event veya basit module pattern ile
+- Her JS dosyasının başında ne yaptığı açıklayan 3-4 satır yorum olsun
+- Gereksiz kütüphane kullanma, sadece gerekirse: marked.js (markdown), highlight.js (kod renklendirme) CDN ile
+- Uygulama tamamen offline çalışabilmeli (API çağrıları dışında)
