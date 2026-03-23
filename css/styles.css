@@ -84,6 +84,16 @@ h1, h2 { font-family: "Familjen Grotesk", sans-serif; margin: 0; }
   margin-right: 8px;
 }
 .bubble.speaking { outline: 1px solid var(--accent); box-shadow: 0 0 0 2px #ff9b2f29; }
+.word-token {
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  border-bottom: 1px dashed #ffbe66;
+}
+.word-token:hover { color: var(--accent-2); }
 
 .composer {
   display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
@@ -125,6 +135,16 @@ textarea { resize: vertical; min-height: 52px; }
   padding: 14px; display: flex; flex-direction: column; gap: 8px;
 }
 .settings-head { display: flex; justify-content: space-between; align-items: center; }
+.word-modal #wordModalBody { line-height: 1.5; color: var(--text); }
+.word-meaning {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid #ffffff1f;
+}
+.word-meaning p { margin: 6px 0; }
+.word-meaning small { color: var(--muted); }
 
 .toast-root { position: fixed; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
 .toast { padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid #ffffff22; }

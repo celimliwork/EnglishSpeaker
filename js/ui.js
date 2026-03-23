@@ -16,6 +16,10 @@ export const els = {
   themeToggleBtn: $("#themeToggleBtn"),
   settingsBtn: $("#settingsBtn"),
   settingsModal: $("#settingsModal"),
+  wordModal: $("#wordModal"),
+  wordModalTitle: $("#wordModalTitle"),
+  wordModalBody: $("#wordModalBody"),
+  closeWordModalBtn: $("#closeWordModalBtn"),
   closeSettingsBtn: $("#closeSettingsBtn"),
   messageInput: $("#messageInput"),
   sendBtn: $("#sendBtn"),
@@ -93,22 +97,61 @@ export function getSettingsFormValue() {
   };
 }
 
-function splitCorrection(text = "") {
-  const match = text.match(/\[Correction:\s*([^\]]+)\]\s*$/i);
-  if (!match) return { main: text, correction: "" };
-  const main = text.replace(match[0], "").trim();
-  return { main, correction: match[1].trim() };
+function extractBracketTag(text = "", tag = "Correction") {
+  const regex = new RegExp(`\\[${tag}:\\s*([^\\]]+)\\]`, "i");
+  const match = text.match(regex);
+  if (!match) return { cleaned: text, value: "" };
+  return {
+    cleaned: text.replace(match[0], "").replace(/\s{2,}/g, " ").trim(),
+    value: match[1].trim(),
+  };
+}
+
+function makeWordsClickable(root) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const targets = [];
+  let node = walker.nextNode();
+  while (node) {
+    const parent = node.parentElement;
+    if (parent && !parent.closest("code, pre, a, button")) targets.push(node);
+    node = walker.nextNode();
+  }
+
+  targets.forEach((textNode) => {
+    const text = textNode.textContent || "";
+    if (!/[A-Za-z]/.test(text)) return;
+    const fragment = document.createDocumentFragment();
+    const parts = text.split(/([A-Za-z][A-Za-z'-]{1,})/g);
+    parts.forEach((part) => {
+      if (/^[A-Za-z][A-Za-z'-]{1,}$/.test(part)) {
+        const token = document.createElement("button");
+        token.type = "button";
+        token.className = "word-token";
+        token.dataset.word = part.toLowerCase();
+        token.textContent = part;
+        fragment.appendChild(token);
+      } else {
+        fragment.appendChild(document.createTextNode(part));
+      }
+    });
+    textNode.replaceWith(fragment);
+  });
 }
 
 export function renderMessages(messages, settings) {
   els.messages.innerHTML = messages
     .map((m) => {
       const meta = `${humanProviderModel(m.provider || settings.provider, m.model || (settings.provider === "gemini" ? settings.geminiModel : settings.openaiModel))} · ${new Date(m.createdAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}`;
-      const { main, correction } = splitCorrection(m.content);
+      const correctionTag = extractBracketTag(m.content, "Correction");
+      const betterSentenceTag = extractBracketTag(correctionTag.cleaned, "Better sentence");
+      const main = betterSentenceTag.cleaned;
+      const correction = correctionTag.value;
+      const betterSentence = betterSentenceTag.value;
       return `
         <article class="bubble ${m.role === "user" ? "user" : "ai"}" data-msg-id="${m.id}">
           <div class="content">${window.marked.parse(main || "")}</div>
           ${correction ? `<div class="correction-card"><span>Correction</span>${correction}</div>` : ""}
+          ${betterSentence ? `<div class="correction-card"><span>Try This</span>${betterSentence}</div>` : ""}
           <div class="meta">${meta}</div>
           <div class="actions">
             <button class="btn ghost speak-msg" data-id="${m.id}">🔊 Oku</button>
@@ -118,6 +161,7 @@ export function renderMessages(messages, settings) {
       `;
     })
     .join("");
+  document.querySelectorAll(".bubble.ai .content").forEach((root) => makeWordsClickable(root));
   document.querySelectorAll("pre code").forEach((el) => window.hljs.highlightElement(el));
   els.messages.scrollTop = els.messages.scrollHeight;
 }
@@ -154,4 +198,30 @@ export function setSpeakingBubble(msgId, speaking) {
   if (!speaking) return;
   const bubble = document.querySelector(`.bubble[data-msg-id="${msgId}"]`);
   if (bubble) bubble.classList.add("speaking");
+}
+
+export function renderWordModal(word, payload) {
+  els.wordModalTitle.textContent = word;
+  if (!payload?.meanings?.length) {
+    els.wordModalBody.innerHTML = "<p>Anlam bulunamadı. Başka bir kelime deneyebilirsin.</p>";
+    return;
+  }
+  const phonetic = payload.phonetic ? `<p><strong>Okunuş:</strong> ${payload.phonetic}</p>` : "";
+  const meanings = payload.meanings
+    .map(
+      (m) => `
+      <div class="word-meaning">
+        <strong>${m.partOfSpeech || "meaning"}</strong>
+        <p>${m.definition}</p>
+        ${m.example ? `<small>Örnek: ${m.example}</small>` : ""}
+      </div>
+    `,
+    )
+    .join("");
+  els.wordModalBody.innerHTML = `${phonetic}${meanings}`;
+}
+
+export function renderPhraseModal(title, explanationText) {
+  els.wordModalTitle.textContent = title;
+  els.wordModalBody.innerHTML = `<div class="word-meaning">${window.marked.parse(explanationText || "")}</div>`;
 }

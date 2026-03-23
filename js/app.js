@@ -3,7 +3,7 @@
   Kullanıcı mesajını alır, AI çağrısı yapar, sonucu render edip opsiyonel seslendirir.
   Kısayollar, ayarlar, sohbet yönetimi ve hata bildirimlerini burada yönetir.
 */
-import { askAI } from "./api.js";
+import { askAI, explainPhrase, getWordDefinition } from "./api.js";
 import { getIsListening, initSpeech, pauseOrResumeTTS, speakText, startSTT, stopSTT } from "./speech.js";
 import {
   clearAllData,
@@ -18,7 +18,7 @@ import {
   setActiveChatId,
   updateChat,
 } from "./storage.js";
-import { els, getSettingsFormValue, renderChats, renderMessages, renderModelOptions, renderSettings, setMicVisual, setSpeakingBubble, toast } from "./ui.js";
+import { els, getSettingsFormValue, renderChats, renderMessages, renderModelOptions, renderPhraseModal, renderSettings, renderWordModal, setMicVisual, setSpeakingBubble, toast } from "./ui.js";
 
 let settings = getSettings();
 let chats = getChats();
@@ -56,7 +56,8 @@ function cleanTextForSpeech(text = "") {
 
 function buildSystemPromptWithLevel() {
   const level = settings.englishLevel || "B1";
-  const levelInstruction = `\n\nUser level: ${level}. Adapt vocabulary, grammar complexity, pace, and idioms to this CEFR level.`;
+  const levelInstruction = `\n\nUser level: ${level}. Adapt vocabulary, grammar complexity, pace, and idioms to this CEFR level.
+If the user makes sentence-level errors, add ONE short guidance at the end in this format: [Better sentence: "..."]`;
   return `${settings.systemPrompt}${levelInstruction}`;
 }
 
@@ -98,6 +99,10 @@ async function sendCurrentInput() {
     return;
   }
 
+  stopSTT();
+  setMicVisual(false);
+  sttBaseText = "";
+  sttFinalText = "";
   els.messageInput.value = "";
   pushMessage("user", text);
   refreshUI();
@@ -163,12 +168,54 @@ function bindEvents() {
     }
   });
 
+  els.messages.addEventListener("mouseup", () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const selected = sel.toString().replace(/\s+/g, " ").trim();
+    if (!selected || selected.length < 3) return;
+    const anchorEl = sel.anchorNode?.parentElement;
+    if (!anchorEl?.closest(".bubble.ai .content")) return;
+    if (selected.split(" ").length > 8) {
+      toast("Lutfen en fazla 8 kelimelik bir ifade sec", "warn");
+      return;
+    }
+
+    const isSingleWord = !selected.includes(" ");
+    els.wordModalTitle.textContent = selected;
+    els.wordModalBody.textContent = "Yukleniyor...";
+    els.wordModal.showModal();
+
+    if (isSingleWord) {
+      getWordDefinition(selected.toLowerCase())
+        .then((data) => renderWordModal(selected, data))
+        .catch((error) => {
+          els.wordModalBody.textContent = error.message || "Kelime aciklamasi alinamadi";
+        });
+      return;
+    }
+
+    const key = settings.provider === "gemini" ? settings.geminiKey : settings.openaiKey;
+    explainPhrase({
+      provider: settings.provider,
+      model: settings.provider === "gemini" ? settings.geminiModel : settings.openaiModel,
+      apiKey: key,
+      phrase: selected,
+      englishLevel: settings.englishLevel || "B1",
+    })
+      .then((text) => renderPhraseModal(selected, text))
+      .catch((error) => {
+        els.wordModalBody.textContent = error.message || "Ifade aciklamasi alinamadi";
+      });
+  });
+
   els.messages.addEventListener("click", (e) => {
     const speakBtn = e.target.closest(".speak-msg");
     const copyBtn = e.target.closest(".copy-msg");
+    const wordToken = e.target.closest(".word-token");
     if (speakBtn) {
       const msg = activeChat()?.messages.find((m) => m.id === speakBtn.dataset.id);
       if (msg) speakWithMicControl({ text: msg.content, msgId: msg.id });
+      return;
     }
     if (copyBtn) {
       const msg = activeChat()?.messages.find((m) => m.id === copyBtn.dataset.id);
@@ -176,6 +223,19 @@ function bindEvents() {
         navigator.clipboard.writeText(msg.content);
         toast("Mesaj kopyalandı", "success");
       }
+      return;
+    }
+    if (wordToken) {
+      const word = wordToken.dataset.word;
+      if (!word) return;
+      els.wordModalTitle.textContent = word;
+      els.wordModalBody.textContent = "Yukleniyor...";
+      els.wordModal.showModal();
+      getWordDefinition(word)
+        .then((data) => renderWordModal(word, data))
+        .catch((error) => {
+          els.wordModalBody.textContent = error.message || "Kelime aciklamasi alinamadi";
+        });
     }
   });
 
@@ -219,6 +279,7 @@ function bindEvents() {
 
   els.settingsBtn.addEventListener("click", () => els.settingsModal.showModal());
   els.closeSettingsBtn.addEventListener("click", () => els.settingsModal.close());
+  els.closeWordModalBtn.addEventListener("click", () => els.wordModal.close());
   els.toggleSidebarBtn.addEventListener("click", () => els.sidebar.classList.toggle("open"));
   els.themeToggleBtn.addEventListener("click", () => {
     settings.theme = settings.theme === "dark" ? "light" : "dark";
