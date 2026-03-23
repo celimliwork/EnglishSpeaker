@@ -31,6 +31,36 @@ body {
   color: var(--text);
   font-family: "DM Sans", sans-serif;
 }
+
+::selection {
+  background: #ffd166;
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background: #ffd166;
+  color: #ffffff;
+}
+
+body.light ::selection {
+  background: #1f3f7a;
+  color: #ffffff;
+}
+
+body.light ::-moz-selection {
+  background: #1f3f7a;
+  color: #ffffff;
+}
+
+.messages *::selection {
+  background: #ffd166;
+  color: #ffffff;
+}
+
+.messages *::-moz-selection {
+  background: #ffd166;
+  color: #ffffff;
+}
 h1, h2 { font-family: "Familjen Grotesk", sans-serif; margin: 0; }
 
 .app-shell { display: grid; grid-template-columns: 280px 1fr; height: 100vh; }
@@ -85,13 +115,10 @@ h1, h2 { font-family: "Familjen Grotesk", sans-serif; margin: 0; }
 }
 .bubble.speaking { outline: 1px solid var(--accent); box-shadow: 0 0 0 2px #ff9b2f29; }
 .word-token {
-  border: none;
-  background: transparent;
   color: inherit;
-  padding: 0;
-  margin: 0;
   cursor: pointer;
   border-bottom: 1px dashed #ffbe66;
+  user-select: text;
 }
 .word-token:hover { color: var(--accent-2); }
 
@@ -145,6 +172,18 @@ textarea { resize: vertical; min-height: 52px; }
 }
 .word-meaning p { margin: 6px 0; }
 .word-meaning small { color: var(--muted); }
+.example-en {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.45;
+}
+.example-tr,
+.meaning-muted {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
 
 .toast-root { position: fixed; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
 .toast { padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid #ffffff22; }

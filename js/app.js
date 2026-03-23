@@ -3,7 +3,7 @@
   Kullanıcı mesajını alır, AI çağrısı yapar, sonucu render edip opsiyonel seslendirir.
   Kısayollar, ayarlar, sohbet yönetimi ve hata bildirimlerini burada yönetir.
 */
-import { askAI, explainPhrase, getWordDefinition } from "./api.js";
+import { askAI, explainSelection } from "./api.js";
 import { getIsListening, initSpeech, pauseOrResumeTTS, speakText, startSTT, stopSTT } from "./speech.js";
 import {
   clearAllData,
@@ -18,7 +18,7 @@ import {
   setActiveChatId,
   updateChat,
 } from "./storage.js";
-import { els, getSettingsFormValue, renderChats, renderMessages, renderModelOptions, renderPhraseModal, renderSettings, renderWordModal, setMicVisual, setSpeakingBubble, toast } from "./ui.js";
+import { els, getSettingsFormValue, renderChats, renderMessages, renderModelOptions, renderSelectionModal, renderSettings, setMicVisual, setSpeakingBubble, toast } from "./ui.js";
 
 let settings = getSettings();
 let chats = getChats();
@@ -51,7 +51,10 @@ function pushMessage(role, content, provider = settings.provider, model = provid
 }
 
 function cleanTextForSpeech(text = "") {
-  return text.replace(/\s*\[Correction:[^\]]+\]\s*$/i, "").trim();
+  return text
+    .replace(/\[(Correction|Better sentence):[^\]]+\]/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function buildSystemPromptWithLevel() {
@@ -168,45 +171,42 @@ function bindEvents() {
     }
   });
 
-  els.messages.addEventListener("mouseup", () => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed) return;
-    const selected = sel.toString().replace(/\s+/g, " ").trim();
-    if (!selected || selected.length < 3) return;
-    const anchorEl = sel.anchorNode?.parentElement;
-    if (!anchorEl?.closest(".bubble.ai .content")) return;
+  const openSelectionMeaning = (selectionText) => {
+    const selected = selectionText.replace(/\s+/g, " ").trim();
+    if (!selected || selected.length < 2) return;
     if (selected.split(" ").length > 8) {
       toast("Lutfen en fazla 8 kelimelik bir ifade sec", "warn");
       return;
     }
-
-    const isSingleWord = !selected.includes(" ");
+    const key = settings.provider === "gemini" ? settings.geminiKey : settings.openaiKey;
     els.wordModalTitle.textContent = selected;
     els.wordModalBody.textContent = "Yukleniyor...";
     els.wordModal.showModal();
-
-    if (isSingleWord) {
-      getWordDefinition(selected.toLowerCase())
-        .then((data) => renderWordModal(selected, data))
-        .catch((error) => {
-          els.wordModalBody.textContent = error.message || "Kelime aciklamasi alinamadi";
-        });
-      return;
-    }
-
-    const key = settings.provider === "gemini" ? settings.geminiKey : settings.openaiKey;
-    explainPhrase({
+    explainSelection({
       provider: settings.provider,
       model: settings.provider === "gemini" ? settings.geminiModel : settings.openaiModel,
       apiKey: key,
-      phrase: selected,
+      selection: selected,
       englishLevel: settings.englishLevel || "B1",
     })
-      .then((text) => renderPhraseModal(selected, text))
+      .then((data) => renderSelectionModal(selected, data))
       .catch((error) => {
-        els.wordModalBody.textContent = error.message || "Ifade aciklamasi alinamadi";
+        els.wordModalBody.textContent = error.message || "Aciklama alinamadi";
       });
-  });
+  };
+
+  const handleSelectionLookup = () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) return;
+    const selected = sel.toString();
+    if (!selected) return;
+    const anchorEl = sel.anchorNode?.parentElement;
+    if (!anchorEl?.closest(".bubble.ai .content")) return;
+    openSelectionMeaning(selected);
+  };
+
+  els.messages.addEventListener("mouseup", handleSelectionLookup);
+  els.messages.addEventListener("touchend", () => setTimeout(handleSelectionLookup, 30));
 
   els.messages.addEventListener("click", (e) => {
     const speakBtn = e.target.closest(".speak-msg");
@@ -225,17 +225,20 @@ function bindEvents() {
       }
       return;
     }
+    const activeSelection = window.getSelection();
+    if (activeSelection && !activeSelection.isCollapsed && activeSelection.toString().trim()) {
+      return;
+    }
     if (wordToken) {
       const word = wordToken.dataset.word;
       if (!word) return;
-      els.wordModalTitle.textContent = word;
-      els.wordModalBody.textContent = "Yukleniyor...";
-      els.wordModal.showModal();
-      getWordDefinition(word)
-        .then((data) => renderWordModal(word, data))
-        .catch((error) => {
-          els.wordModalBody.textContent = error.message || "Kelime aciklamasi alinamadi";
-        });
+      openSelectionMeaning(word);
+      return;
+    }
+    const speakInlineBtn = e.target.closest(".speak-inline");
+    if (speakInlineBtn) {
+      const exampleText = speakInlineBtn.dataset.speakText || "";
+      speakWithMicControl({ text: exampleText, msgId: "inline-example" });
     }
   });
 
@@ -308,7 +311,13 @@ function bindEvents() {
     els.openaiKeyInput.type = els.openaiKeyInput.type === "password" ? "text" : "password";
   });
 
-  els.ttsSpeedRange.addEventListener("input", () => (els.ttsSpeedLabel.textContent = els.ttsSpeedRange.value));
+  els.ttsSpeedRange.addEventListener("input", () => {
+    els.ttsSpeedLabel.textContent = els.ttsSpeedRange.value;
+    settings.ttsSpeed = Number(els.ttsSpeedRange.value);
+  });
+  els.ttsSpeedRange.addEventListener("change", () => {
+    saveSettings(settings);
+  });
   els.saveSettingsBtn.addEventListener("click", () => {
     settings = { ...settings, ...getSettingsFormValue() };
     saveSettings(settings);

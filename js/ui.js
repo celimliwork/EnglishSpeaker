@@ -124,8 +124,7 @@ function makeWordsClickable(root) {
     const parts = text.split(/([A-Za-z][A-Za-z'-]{1,})/g);
     parts.forEach((part) => {
       if (/^[A-Za-z][A-Za-z'-]{1,}$/.test(part)) {
-        const token = document.createElement("button");
-        token.type = "button";
+        const token = document.createElement("span");
         token.className = "word-token";
         token.dataset.word = part.toLowerCase();
         token.textContent = part;
@@ -224,4 +223,17 @@ export function renderWordModal(word, payload) {
 export function renderPhraseModal(title, explanationText) {
   els.wordModalTitle.textContent = title;
   els.wordModalBody.innerHTML = `<div class="word-meaning">${window.marked.parse(explanationText || "")}</div>`;
+}
+
+export function renderSelectionModal(selection, details) {
+  els.wordModalTitle.textContent = selection;
+  els.wordModalBody.innerHTML = `
+    <div class="word-meaning">
+      <p class="example-en">${details.exampleEnglish || "-"}</p>
+      <p class="example-tr">${details.exampleTurkish || "-"}</p>
+      <p class="meaning-muted">${details.turkishMeaning || "-"}</p>
+      <button type="button" class="btn ghost speak-inline" data-speak-text="${(details.exampleEnglish || "").replace(/"/g, "&quot;")}">🔊 Oku</button>
+    </div>
+    ${details.shortTip ? `<div class="word-meaning"><p class="meaning-muted">${details.shortTip}</p></div>` : ""}
+  `;
 }

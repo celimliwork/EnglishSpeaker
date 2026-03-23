@@ -96,6 +96,65 @@ export async function explainPhrase({ provider, model, apiKey, phrase, englishLe
   return text;
 }
 
+function extractJson(text = "") {
+  const cleaned = text.replace(/```json|```/gi, "").trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("Açıklama formatı okunamadı");
+  return JSON.parse(match[0]);
+}
+
+export async function explainSelection({ provider, model, apiKey, selection, englishLevel = "B1" }) {
+  if (!apiKey) throw new Error("Açıklama için önce API key gir");
+  const prompt = [
+    "You are an English tutor for Turkish learners.",
+    `Learner level: ${englishLevel}`,
+    `Selection: "${selection}"`,
+    "Return ONLY JSON in this schema:",
+    '{"turkishMeaning":"", "exampleEnglish":"", "exampleTurkish":"", "shortTip":""}',
+    "Rules: turkishMeaning must be a direct Turkish equivalent, examples short and natural.",
+  ].join("\n");
+
+  let rawText = "";
+  if (provider === "gemini") {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      }),
+    });
+    if (!response.ok) throw new Error(mapApiError(response.status));
+    const data = await response.json();
+    rawText = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("\n").trim();
+  } else {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.3,
+      }),
+    });
+    if (!response.ok) throw new Error(mapApiError(response.status));
+    const data = await response.json();
+    rawText = data?.choices?.[0]?.message?.content?.trim();
+  }
+
+  if (!rawText) throw new Error("Açıklama üretilemedi");
+  const parsed = extractJson(rawText);
+  return {
+    turkishMeaning: parsed.turkishMeaning || "",
+    exampleEnglish: parsed.exampleEnglish || "",
+    exampleTurkish: parsed.exampleTurkish || "",
+    shortTip: parsed.shortTip || "",
+  };
+}
+
 async function askGemini({ model, apiKey, systemPrompt, history, userText }) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const contents = [
